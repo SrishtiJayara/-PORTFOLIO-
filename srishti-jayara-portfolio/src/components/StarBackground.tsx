@@ -14,9 +14,19 @@ interface Star {
   color: string;
 }
 
+interface ShootingStar {
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  length: number;
+  speed: number;
+  opacity: number;
+  color: string;
+}
+
 export default function StarBackground() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const mouseRef = useRef<{ x: number; y: number }>({ x: -1000, y: -1000 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -27,7 +37,8 @@ export default function StarBackground() {
 
     let animationFrameId: number;
     let stars: Star[] = [];
-    const maxStars = 120;
+    let shootingStars: ShootingStar[] = [];
+    const maxStars = 150;
 
     const resizeCanvas = () => {
       canvas.width = window.innerWidth;
@@ -37,21 +48,14 @@ export default function StarBackground() {
 
     const initStars = () => {
       stars = [];
-      const colors = [
-        'rgba(255, 255, 255, 0.8)',
-        'rgba(244, 63, 94, 0.6)', // rose / fuchsia hint
-        'rgba(168, 85, 247, 0.6)', // purple hint
-        'rgba(59, 130, 246, 0.6)', // blue hint
-      ];
-
       for (let i = 0; i < maxStars; i++) {
         stars.push({
           x: Math.random() * canvas.width,
           y: Math.random() * canvas.height,
-          size: Math.random() * 1.5 + 0.5,
-          twinkleSpeed: Math.random() * 0.02 + 0.005,
+          size: Math.random() * 1.5 + 0.4,
+          twinkleSpeed: Math.random() * 0.025 + 0.008,
           twinklePhase: Math.random() * Math.PI * 2,
-          color: Math.random() > 0.8 ? colors[Math.floor(Math.random() * colors.length)] : 'rgba(255, 255, 255, 0.7)',
+          color: 'rgba(255, 255, 255, 0.95)',
         });
       }
     };
@@ -88,27 +92,10 @@ export default function StarBackground() {
       ctx.fillStyle = tertiaryGlow;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw subtle grids (very elegant, low contrast tech aesthetic)
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.015)';
-      ctx.lineWidth = 1;
-      const gridSize = 100;
-      for (let x = 0; x < canvas.width; x += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-      }
-      for (let y = 0; y < canvas.height; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
-      }
-
-      // Draw and connect stars
+      // Draw twinkling stars (white dots)
       stars.forEach((star) => {
         star.twinklePhase += star.twinkleSpeed;
-        const opacity = (Math.sin(star.twinklePhase) + 1) / 2 * 0.6 + 0.4;
+        const opacity = (Math.sin(star.twinklePhase) + 1) / 2 * 0.85 + 0.15;
         
         ctx.beginPath();
         ctx.fillStyle = star.color;
@@ -116,64 +103,101 @@ export default function StarBackground() {
         ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1.0;
-
-        // Interactive gravity connections to mouse
-        const dx = mouseRef.current.x - star.x;
-        const dy = mouseRef.current.y - star.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < 150) {
-          ctx.beginPath();
-          ctx.strokeStyle = `rgba(168, 85, 247, ${0.15 * (1 - dist / 150)})`;
-          ctx.lineWidth = 0.5;
-          ctx.moveTo(star.x, star.y);
-          ctx.lineTo(mouseRef.current.x, mouseRef.current.y);
-          ctx.stroke();
-        }
       });
 
-      // Subtle star-to-star constellation lines (only for very close ones to avoid clutter)
-      ctx.lineWidth = 0.3;
-      for (let i = 0; i < stars.length; i++) {
-        for (let j = i + 1; j < stars.length; j++) {
-          const s1 = stars[i];
-          const s2 = stars[j];
-          const dx = s1.x - s2.x;
-          const dy = s1.y - s2.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
+      // Draw and update shooting stars
+      shootingStars.forEach((star, index) => {
+        star.x += star.dx;
+        star.y += star.dy;
+        star.opacity -= 0.012; // smooth fade-out
 
-          if (dist < 100) {
-            ctx.strokeStyle = `rgba(255, 255, 255, ${0.05 * (1 - dist / 100)})`;
-            ctx.beginPath();
-            ctx.moveTo(s1.x, s1.y);
-            ctx.lineTo(s2.x, s2.y);
-            ctx.stroke();
-          }
+        if (
+          star.opacity <= 0 ||
+          star.x < -100 ||
+          star.x > canvas.width + 100 ||
+          star.y < -100 ||
+          star.y > canvas.height + 100
+        ) {
+          shootingStars.splice(index, 1);
+          return;
         }
+
+        // Draw the streak with gradient
+        ctx.beginPath();
+        const grad = ctx.createLinearGradient(
+          star.x,
+          star.y,
+          star.x - star.dx * (star.length / speedRatio(star)),
+          star.y - star.dy * (star.length / speedRatio(star))
+        );
+        grad.addColorStop(0, `rgba(255, 255, 255, ${star.opacity})`);
+        
+        // Handle tint color mapping smoothly
+        const colorPart = star.color.replace('0.6', String(star.opacity * 0.7));
+        grad.addColorStop(0.3, colorPart); 
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 2.0;
+        ctx.moveTo(star.x, star.y);
+        ctx.lineTo(
+          star.x - star.dx * (star.length / speedRatio(star)),
+          star.y - star.dy * (star.length / speedRatio(star))
+        );
+        ctx.stroke();
+
+        // Draw a tiny bright head/nucleus
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`;
+        ctx.arc(star.x, star.y, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Spawn shooting stars periodically
+      if (Math.random() < 0.015 && shootingStars.length < 3) {
+        // Spawn from top or left edge
+        const spawnFromTop = Math.random() > 0.3;
+        const x = spawnFromTop ? Math.random() * canvas.width * 0.8 : 0;
+        const y = spawnFromTop ? 0 : Math.random() * canvas.height * 0.5;
+        
+        // Direction: downwards diagonal (approx 30 to 60 degrees)
+        const angle = (Math.PI / 6) + Math.random() * (Math.PI / 6); // 30 to 60 deg
+        const speed = Math.random() * 8 + 8; // 8 to 16 pixels per frame
+        const length = Math.random() * 120 + 80; // streak length
+        
+        const colors = [
+          'rgba(255, 255, 255, 0.6)',  // white
+          'rgba(56, 189, 248, 0.6)',   // sky blue
+          'rgba(192, 132, 252, 0.6)',  // light purple
+        ];
+
+        shootingStars.push({
+          x,
+          y,
+          dx: Math.cos(angle) * speed,
+          dy: Math.sin(angle) * speed,
+          length,
+          speed,
+          opacity: 1.0,
+          color: colors[Math.floor(Math.random() * colors.length)],
+        });
       }
 
       animationFrameId = requestAnimationFrame(draw);
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseRef.current = { x: e.clientX, y: e.clientY };
-    };
-
-    const handleMouseLeave = () => {
-      mouseRef.current = { x: -1000, y: -1000 };
+    // Helper to calculate speed ratio for tail length rendering
+    const speedRatio = (star: ShootingStar) => {
+      return Math.sqrt(star.dx * star.dx + star.dy * star.dy);
     };
 
     window.addEventListener('resize', resizeCanvas);
-    window.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseleave', handleMouseLeave);
 
     resizeCanvas();
     draw();
 
     return () => {
       window.removeEventListener('resize', resizeCanvas);
-      window.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseleave', handleMouseLeave);
       cancelAnimationFrame(animationFrameId);
     };
   }, []);
