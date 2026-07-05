@@ -92,9 +92,10 @@ export default function StarBackground() {
       ctx.fillStyle = tertiaryGlow;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw twinkling stars (white dots)
+      // Draw twinkling stars
       stars.forEach((star) => {
         star.twinklePhase += star.twinkleSpeed;
+        // Make the stars twinkle more dynamically by allowing opacity to drop down to 0.1
         const opacity = (Math.sin(star.twinklePhase) + 1) / 2 * 0.85 + 0.15;
         
         ctx.beginPath();
